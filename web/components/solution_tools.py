@@ -545,6 +545,36 @@ def solution_tools_form() -> rx.Component:
                                 background="var(--green-a1)",
                                 transition="all 0.15s ease",
                             ),
+                            rx.cond(
+                                rx.selected_files(SOL_UPLOAD_ID).length() > 0,
+                                rx.box(
+                                    rx.vstack(
+                                        rx.hstack(
+                                            rx.icon("circle-check", size=14, color="var(--green-9)"),
+                                            rx.text("File ready to upload", size="2", color="var(--green-11)"),
+                                            align="center",
+                                            spacing="2",
+                                        ),
+                                        rx.foreach(
+                                            rx.selected_files(SOL_UPLOAD_ID),
+                                            lambda f: rx.hstack(
+                                                rx.icon("file", size=12, color="var(--green-9)"),
+                                                rx.text(f, size="1", color="var(--gray-a10)", font_family=_MONO),
+                                                spacing="1",
+                                                align="center",
+                                            ),
+                                        ),
+                                        spacing="2",
+                                        width="100%",
+                                    ),
+                                    width="100%",
+                                    padding="10px 12px",
+                                    background="var(--green-a2)",
+                                    border="1px solid var(--green-a5)",
+                                    border_radius="8px",
+                                ),
+                                rx.fragment(),
+                            ),
                             rx.button(
                                 rx.hstack(
                                     rx.icon("zap", size=15), rx.text("Upload & Analyse"), align="center", spacing="2"
@@ -553,6 +583,7 @@ def solution_tools_form() -> rx.Component:
                                 width="100%",
                                 size="3",
                                 color_scheme="green",
+                                disabled=rx.selected_files(SOL_UPLOAD_ID).length() == 0,
                                 cursor="pointer",
                                 font_weight="500",
                             ),
@@ -568,7 +599,11 @@ def solution_tools_form() -> rx.Component:
                                 _tab_button("Check", "check"),
                                 _tab_button("Validate", "validate"),
                                 _tab_button("Dependencies", "deps"),
-                                _tab_button("Rename", "rename"),
+                                rx.cond(
+                                    State.sol_has_agent_assets,
+                                    _tab_button("Rename", "rename"),
+                                    rx.fragment(),
+                                ),
                                 spacing="2",
                                 flex_wrap="wrap",
                             ),
@@ -577,7 +612,10 @@ def solution_tools_form() -> rx.Component:
                                 ("check", _sol_check_tab()),
                                 ("validate", _sol_validate_tab()),
                                 ("deps", _sol_deps_tab()),
-                                ("rename", _sol_rename_tab()),
+                                (
+                                    "rename",
+                                    rx.cond(State.sol_has_agent_assets, _sol_rename_tab(), _sol_check_tab()),
+                                ),
                                 _sol_check_tab(),
                             ),
                             spacing="4",

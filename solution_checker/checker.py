@@ -9,9 +9,10 @@ from pathlib import Path
 
 import defusedxml.ElementTree as ET
 
+from deps_analyzer import analyze_deps_zip_bytes
 from utils import safe_extractall
 
-from ._helpers import _YAML_AVAILABLE, _fail, _load_yaml, _read_xml
+from ._helpers import _YAML_AVAILABLE, _fail, _info, _load_yaml, _read_xml
 from .agent_config import _check_agent_config
 from .knowledge import _check_knowledge
 from .orchestrator import _check_orchestrator
@@ -31,6 +32,9 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
           - ``results``: list of check result dicts (rule_id, category, title, severity, detail)
           - ``agent_name``: detected agent display name
           - ``solution_name``: detected solution unique name
+                      - ``has_agent_assets``: True when a bots/ folder is present in the ZIP
+                      - ``deps_segments``: dependency analysis/map render segments
+                      - ``deps_error``: dependency analysis error, if any
           - ``pass_count``, ``warn_count``, ``fail_count``, ``info_count``: summary counts
           - ``error``: non-empty string if the ZIP could not be parsed at all
     """
@@ -42,6 +46,9 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
             "results": [],
             "agent_name": "",
             "solution_name": "",
+            "has_agent_assets": False,
+            "deps_segments": [],
+            "deps_error": "",
             "pass_count": 0,
             "warn_count": 0,
             "fail_count": 0,
@@ -49,20 +56,25 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
             "error": f"Invalid ZIP file: {exc}",
         }
 
-    # Ensure it looks like a solution ZIP
-    has_solution = any(n == "bots" or n.startswith("bots/") for n in names)
-    if not has_solution:
+    # Accept both agent and non-agent solution ZIPs.
+    # Some valid solutions do not include Copilot assets under bots/.
+    has_agent_assets = any(n == "bots" or n.startswith("bots/") for n in names)
+    has_solution_manifest = any(Path(n).name.lower() == "solution.xml" for n in names)
+    if not (has_agent_assets or has_solution_manifest):
         return {
             "results": [],
             "agent_name": "",
             "solution_name": "",
+            "has_agent_assets": False,
+            "deps_segments": [],
+            "deps_error": "",
             "pass_count": 0,
             "warn_count": 0,
             "fail_count": 0,
             "info_count": 0,
             "error": (
                 "Uploaded file does not appear to be a Power Platform solution ZIP "
-                "(no bots/ directory found). Solution check requires a solution export."
+                "(expected solution.xml and/or bots/ assets)."
             ),
         }
 
@@ -70,6 +82,14 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
     agent_name = ""
     solution_name = ""
     bot_config: dict = {}
+    deps_segments: list[dict] = []
+    deps_error = ""
+
+    # Always provide dependency analysis/map for valid solution ZIPs.
+    try:
+        deps_segments = analyze_deps_zip_bytes(zip_bytes)
+    except Exception as exc:
+        deps_error = str(exc)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         work_dir = Path(tmp_dir)
@@ -134,12 +154,12 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
                 results.extend(_check_orchestrator(work_dir, schema))
         else:
             results.append(
-                _fail(
+                _info(
                     "AGT000",
                     "Agent",
-                    "No bot schema detected",
-                    "Could not detect a bot schema name from the bots/ directory. "
-                    "Agent, topic, knowledge, and security checks are skipped.",
+                    "No Copilot agent assets detected",
+                    "No bot schema was detected from bots/. This is valid for non-agent Power Platform "
+                    "solutions. Agent/topic/knowledge/security checks are skipped; dependency analysis is still provided.",
                 )
             )
 
@@ -178,6 +198,9 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
         "results": results,
         "agent_name": agent_name,
         "solution_name": solution_name,
+        "has_agent_assets": has_agent_assets,
+        "deps_segments": deps_segments,
+        "deps_error": deps_error,
         "pass_count": pass_count,
         "warn_count": warn_count,
         "fail_count": fail_count,

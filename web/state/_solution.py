@@ -1,5 +1,7 @@
 import asyncio
+import io
 import tempfile
+import zipfile
 from pathlib import Path
 
 import reflex as rx
@@ -20,6 +22,7 @@ class SolutionMixin(rx.State, mixin=True):
     sol_zip_bytes: bytes = b""
     sol_zip_name: str = ""
     sol_active_tab: str = "check"
+    sol_has_agent_assets: bool = False
 
     # Solution Checker
     sol_check_results: list[dict] = []
@@ -57,6 +60,10 @@ class SolutionMixin(rx.State, mixin=True):
     # Setters
     @rx.event
     def set_sol_active_tab(self, value: str):
+        if value == "rename" and not self.sol_has_agent_assets:
+            # Non-agent solutions should never open the Rename view.
+            self.sol_active_tab = "check"
+            return
         self.sol_active_tab = value
 
     @rx.event
@@ -101,6 +108,19 @@ class SolutionMixin(rx.State, mixin=True):
 
         self.sol_zip_bytes = data
         self.sol_zip_name = upload_file.filename or "solution.zip"
+        self.sol_has_agent_assets = False
+
+        # Detect Copilot agent assets early so UI can hide unsupported actions.
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                names = zf.namelist()
+            self.sol_has_agent_assets = any(n == "bots" or n.startswith("bots/") for n in names)
+        except Exception:
+            self.sol_has_agent_assets = False
+
+        if not self.sol_has_agent_assets and self.sol_active_tab == "rename":
+            self.sol_active_tab = "check"
+
         # Reset all results
         self.sol_check_results = []
         self.sol_check_error = ""
@@ -168,6 +188,7 @@ class SolutionMixin(rx.State, mixin=True):
             self.sol_check_results = result.get("results", [])
             self.sol_check_agent_name = result.get("agent_name", "")
             self.sol_check_solution_name = result.get("solution_name", "")
+            self.sol_has_agent_assets = bool(result.get("has_agent_assets", self.sol_has_agent_assets))
             self.sol_check_pass = result.get("pass_count", 0)
             self.sol_check_warn = result.get("warn_count", 0)
             self.sol_check_fail = result.get("fail_count", 0)
@@ -241,6 +262,9 @@ class SolutionMixin(rx.State, mixin=True):
         if not self.sol_zip_bytes:
             self.sol_rename_error = "No solution ZIP uploaded."
             return
+        if not self.sol_has_agent_assets:
+            self.sol_rename_error = "Rename is available only for solutions containing Copilot agent assets (bots/)."
+            return
         if not self.sol_rename_new_agent.strip():
             self.sol_rename_error = "Enter a new agent name."
             return
@@ -294,6 +318,7 @@ class SolutionMixin(rx.State, mixin=True):
         self.sol_zip_bytes = b""
         self.sol_zip_name = ""
         self.sol_active_tab = "check"
+        self.sol_has_agent_assets = False
         self.sol_check_results = []
         self.sol_check_error = ""
         self.sol_check_agent_name = ""
