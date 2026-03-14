@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import zipfile
 
+from deps_analyzer import analyze_deps_zip_bytes, analyze_deps_zip_bytes_report
 from solution_checker import check_solution_zip
 
 
@@ -66,3 +67,97 @@ def test_solution_checker_rejects_non_solution_zip():
     assert result["error"] != ""
     assert "solution" in result["error"].lower()
     assert result["deps_segments"] == []
+
+
+def test_deps_report_returns_component_and_relation_rows_with_dedup():
+    zip_bytes = _zip_bytes(
+        {
+            "solution.xml": """
+<ImportExportXml>
+  <SolutionManifest>
+    <UniqueName>DepsRichSolution</UniqueName>
+    <Version>1.0.0.0</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>contoso</UniqueName>
+      <CustomizationPrefix>cts</CustomizationPrefix>
+    </Publisher>
+    <Descriptions>
+      <Description description="Deps test solution" />
+    </Descriptions>
+    <RootComponents>
+      <RootComponent type="44" id="{aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb}" schemaName="cts_env" />
+      <RootComponent type="430" id="{cccccccc-1111-2222-3333-dddddddddddd}" schemaName="cts_agent" />
+    </RootComponents>
+    <MissingDependencies>
+      <MissingDependency>
+        <Required type="10066" displayName="Conn Ref A" schemaName="cts_conn_ref_a" />
+        <Dependent id="{cccccccc-1111-2222-3333-dddddddddddd}" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="10066" displayName="Conn Ref A" schemaName="cts_conn_ref_a" />
+        <Dependent id="{cccccccc-1111-2222-3333-dddddddddddd}" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="44" displayName="Env Var B" schemaName="cts_env_b" />
+        <Dependent id="{aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb}" />
+      </MissingDependency>
+    </MissingDependencies>
+  </SolutionManifest>
+</ImportExportXml>
+""".strip(),
+        }
+    )
+
+    report = analyze_deps_zip_bytes_report(zip_bytes, detailed_diagram=True)
+
+    assert report["summary_markdown"]
+    assert report["mermaid"]
+
+    component_rows = report["component_rows"]
+    assert isinstance(component_rows, list)
+    assert len(component_rows) == 2
+    assert {row["schema"] for row in component_rows} == {"cts_env", "cts_agent"}
+
+    relation_rows = report["relation_rows"]
+    assert isinstance(relation_rows, list)
+    # duplicate missing dependency should be collapsed to one row
+    assert len(relation_rows) == 2
+    required_names = {row["required"] for row in relation_rows}
+    assert required_names == {"Conn Ref A", "Env Var B"}
+    assert all(row["source"] == "solution.xml" for row in relation_rows)
+
+
+def test_deps_segments_api_remains_backward_compatible():
+    zip_bytes = _zip_bytes(
+        {
+            "solution.xml": """
+<ImportExportXml>
+  <SolutionManifest>
+    <UniqueName>CompatSolution</UniqueName>
+    <Version>1.0.0.0</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>contoso</UniqueName>
+      <CustomizationPrefix>cts</CustomizationPrefix>
+    </Publisher>
+    <Descriptions>
+      <Description description="Compat test solution" />
+    </Descriptions>
+    <RootComponents>
+      <RootComponent type="44" id="{11111111-2222-3333-4444-555555555555}" schemaName="cts_env_var" />
+    </RootComponents>
+  </SolutionManifest>
+</ImportExportXml>
+""".strip(),
+        }
+    )
+
+    segments = analyze_deps_zip_bytes(zip_bytes)
+
+    assert isinstance(segments, list)
+    assert len(segments) == 2
+    assert segments[0]["type"] == "text"
+    assert segments[1]["type"] == "mermaid"
+    assert segments[0]["content"]
+    assert segments[1]["content"]

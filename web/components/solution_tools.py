@@ -294,6 +294,78 @@ def _sol_validate_tab() -> rx.Component:
 
 
 def _sol_deps_tab() -> rx.Component:
+    def _deps_sort_indicator(key: str) -> rx.Component:
+        return rx.cond(
+            State.sol_deps_relation_sort_key == key,
+            rx.icon(
+                rx.cond(State.sol_deps_relation_sort_dir == "asc", "arrow-up", "arrow-down"),
+                size=12,
+            ),
+            rx.icon("arrow-up-down", size=12),
+        )
+
+    def _deps_component_sort_indicator(key: str) -> rx.Component:
+        return rx.cond(
+            State.sol_deps_component_sort_key == key,
+            rx.icon(
+                rx.cond(State.sol_deps_component_sort_dir == "asc", "arrow-up", "arrow-down"),
+                size=12,
+            ),
+            rx.icon("arrow-up-down", size=12),
+        )
+
+    def _deps_sortable_header(label: str, key: str) -> rx.Component:
+        return rx.hstack(
+            rx.text(label, font_size="11px", font_weight="700", color="var(--gray-a10)"),
+            _deps_sort_indicator(key),
+            spacing="1",
+            align="center",
+            cursor="pointer",
+            on_click=State.set_sol_deps_relation_sort(key),
+        )
+
+    def _deps_component_sortable_header(label: str, key: str) -> rx.Component:
+        return rx.hstack(
+            rx.text(label, font_size="11px", font_weight="700", color="var(--gray-a10)"),
+            _deps_component_sort_indicator(key),
+            spacing="1",
+            align="center",
+            cursor="pointer",
+            on_click=State.set_sol_deps_component_sort(key),
+        )
+
+    def _deps_relation_row(row: dict) -> rx.Component:
+        return rx.grid(
+            rx.text(row["dependent"], size="1", color="var(--gray-11)", font_weight="500"),
+            rx.badge(row["dependent_type"], color_scheme="blue", variant="soft", size="1"),
+            rx.text(row["required"], size="1", color="var(--gray-12)", font_weight="500"),
+            rx.badge(row["required_type"], color_scheme="red", variant="soft", size="1"),
+            rx.badge(row["source"], color_scheme="cyan", variant="soft", size="1"),
+            columns="2.2fr 1fr 2.2fr 1fr 1.4fr",
+            gap="10px",
+            align="center",
+            padding="8px 10px",
+            border_bottom="1px solid var(--gray-a3)",
+            width="100%",
+        )
+
+    def _deps_component_row(row: dict) -> rx.Component:
+        return rx.grid(
+            rx.text(row["name"], size="1", color="var(--gray-12)", font_weight="600"),
+            rx.text(row["schema"], size="1", color="var(--gray-a10)"),
+            rx.badge(row["type"], color_scheme="blue", variant="soft", size="1"),
+            rx.text(row["type_code"], size="1", color="var(--gray-a10)"),
+            rx.badge(row["group"], color_scheme="gray", variant="soft", size="1"),
+            rx.text(row["kind"], size="1", color="var(--gray-a10)"),
+            rx.badge(row["source"], color_scheme="cyan", variant="soft", size="1"),
+            columns="1.6fr 2.4fr 1.2fr 0.6fr 1fr 1.2fr 1.2fr",
+            gap="10px",
+            align="center",
+            padding="8px 10px",
+            border_bottom="1px solid var(--gray-a3)",
+            width="100%",
+        )
+
     return rx.vstack(
         rx.cond(
             State.sol_deps_error != "",
@@ -323,7 +395,158 @@ def _sol_deps_tab() -> rx.Component:
                 padding="24px",
                 width="100%",
             ),
-            rx.box(rx.foreach(State.sol_deps_segments, render_segment), width="100%"),
+            rx.vstack(
+                rx.hstack(
+                    rx.icon("network", size=16, color="var(--green-9)"),
+                    rx.text("Dependency Diagram", size="2", font_weight="600", color="var(--gray-12)"),
+                    rx.spacer(),
+                    rx.button("-", on_click=State.sol_deps_zoom_out, variant="outline", size="1"),
+                    rx.button("+", on_click=State.sol_deps_zoom_in, variant="outline", size="1"),
+                    rx.button("Reset", on_click=State.sol_deps_zoom_reset, variant="outline", size="1"),
+                    rx.badge(State.sol_deps_diagram_zoom_style, color_scheme="gray", variant="soft", size="1"),
+                    spacing="2",
+                    align="center",
+                    width="100%",
+                ),
+                rx.hstack(
+                    rx.text("Diagram mode:", size="1", color="var(--gray-a10)", font_weight="600"),
+                    rx.button(
+                        "Aggregated",
+                        variant=rx.cond(State.sol_deps_diagram_mode == "aggregated", "solid", "outline"),
+                        size="1",
+                        on_click=State.set_sol_deps_diagram_mode("aggregated"),
+                    ),
+                    rx.button(
+                        "Detailed",
+                        variant=rx.cond(State.sol_deps_diagram_mode == "detailed", "solid", "outline"),
+                        size="1",
+                        on_click=State.set_sol_deps_diagram_mode("detailed"),
+                    ),
+                    spacing="2",
+                    align="center",
+                    width="100%",
+                ),
+                rx.foreach(
+                    State.sol_deps_visible_segments,
+                    lambda segment: rx.cond(
+                        segment["type"] == "mermaid",
+                        rx.box(
+                            rx.el.pre(
+                                segment["content"],
+                                class_name="mermaid",
+                                width=State.sol_deps_diagram_zoom_style,
+                                min_width=State.sol_deps_diagram_zoom_style,
+                            ),
+                            width="100%",
+                            overflow_x="auto",
+                            overflow_y="auto",
+                            padding="16px",
+                            border="1px solid var(--gray-a4)",
+                            border_radius="10px",
+                            background="var(--gray-a2)",
+                        ),
+                        render_segment(segment),
+                    ),
+                ),
+                rx.cond(
+                    (State.sol_deps_diagram_mode != "detailed") & State.sol_has_deps_components,
+                    rx.box(
+                        rx.hstack(
+                            rx.text("Components In Solution", size="2", font_weight="600"),
+                            rx.spacer(),
+                            rx.badge(State.sol_deps_filtered_component_rows.length(), variant="soft", size="1"),
+                            width="100%",
+                            align="center",
+                        ),
+                        rx.hstack(
+                            rx.input(
+                                placeholder="Filter by name, schema, type, code, group, kind, or source...",
+                                value=State.sol_deps_component_query,
+                                on_change=State.set_sol_deps_component_query,
+                                size="2",
+                                width="100%",
+                            ),
+                            rx.button("Clear", size="2", variant="outline", on_click=State.set_sol_deps_component_query("")),
+                            spacing="2",
+                            width="100%",
+                        ),
+                        rx.box(
+                            rx.grid(
+                                _deps_component_sortable_header("Name", "name"),
+                                _deps_component_sortable_header("Schema", "schema"),
+                                _deps_component_sortable_header("Type", "type"),
+                                _deps_component_sortable_header("Code", "type_code"),
+                                _deps_component_sortable_header("Group", "group"),
+                                _deps_component_sortable_header("Detected Kind", "kind"),
+                                _deps_component_sortable_header("Source", "source"),
+                                columns="1.6fr 2.4fr 1.2fr 0.6fr 1fr 1.2fr 1.2fr",
+                                gap="10px",
+                                padding="8px 10px",
+                                background="var(--gray-a3)",
+                                position="sticky",
+                                top="0",
+                                z_index="2",
+                            ),
+                            rx.foreach(State.sol_deps_filtered_component_rows, _deps_component_row),
+                            max_height="360px",
+                            overflow_x="auto",
+                            overflow_y="auto",
+                            border="1px solid var(--gray-a4)",
+                            border_radius="10px",
+                        ),
+                        spacing="3",
+                        width="100%",
+                    ),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    (State.sol_deps_diagram_mode != "detailed") & State.sol_has_deps_relations,
+                    rx.box(
+                        rx.hstack(
+                            rx.text("Dependency Relations Table", size="2", font_weight="600"),
+                            rx.spacer(),
+                            rx.badge(State.sol_deps_filtered_relation_rows.length(), variant="soft", size="1"),
+                            width="100%",
+                            align="center",
+                        ),
+                        rx.hstack(
+                            rx.input(
+                                placeholder="Filter by dependent, required, type, or source...",
+                                value=State.sol_deps_relation_query,
+                                on_change=State.set_sol_deps_relation_query,
+                                size="2",
+                                width="100%",
+                            ),
+                            rx.button("Clear", size="2", variant="outline", on_click=State.set_sol_deps_relation_query("")),
+                            spacing="2",
+                            width="100%",
+                        ),
+                        rx.box(
+                            rx.grid(
+                                _deps_sortable_header("Dependent", "dependent"),
+                                _deps_sortable_header("Type", "dependent_type"),
+                                _deps_sortable_header("Required", "required"),
+                                _deps_sortable_header("Type", "required_type"),
+                                _deps_sortable_header("Source", "source"),
+                                columns="2.2fr 1fr 2.2fr 1fr 1.4fr",
+                                gap="10px",
+                                padding="8px 10px",
+                                background="var(--gray-a3)",
+                            ),
+                            rx.foreach(State.sol_deps_filtered_relation_rows, _deps_relation_row),
+                            max_height="420px",
+                            overflow_y="auto",
+                            border="1px solid var(--gray-a4)",
+                            border_radius="10px",
+                        ),
+                        spacing="3",
+                        width="100%",
+                    ),
+                    rx.fragment(),
+                ),
+                spacing="4",
+                width="100%",
+            ),
         ),
         spacing="4",
         width="100%",

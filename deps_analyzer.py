@@ -613,16 +613,64 @@ def _build_summary_md(
     return "\n".join(lines)
 
 
+# ── Tabular helpers ──────────────────────────────────────────────────────────
+
+
+def _build_relation_rows(missing: list[_MissingDep]) -> list[dict]:
+    """Build a de-duplicated, UI-friendly dependency relation row list."""
+    seen: set[str] = set()
+    rows: list[dict] = []
+    for m in missing:
+        dep_ref = (m.dep_id or "").lower()
+        req_ref = (m.req_schema or m.req_name).lower()
+        key = f"{dep_ref}->{m.req_type}:{req_ref}"
+        if key in seen:
+            continue
+        seen.add(key)
+
+        req_type, _ = _type_info(m.req_type)
+        rows.append(
+            {
+                "dependent": (m.dep_id[:8] + "…") if m.dep_id else "Solution Component",
+                "dependent_type": "Component",
+                "required": m.req_name or m.req_schema or "Unknown",
+                "required_type": req_type,
+                "source": "solution.xml",
+            }
+        )
+    return rows
+
+
+def _build_component_rows(components: list[_Component]) -> list[dict]:
+    """Build a readable component inventory from parsed components."""
+    rows: list[dict] = []
+    for c in components:
+        type_name, group = _type_info(c.type_code)
+        rows.append(
+            {
+                "name": c.display_name or c.schema_name or (c.comp_id[:8] + "…" if c.comp_id else "Unknown"),
+                "schema": c.schema_name or "-",
+                "type": type_name,
+                "type_code": str(c.type_code),
+                "group": group.title(),
+                "kind": "-",
+                "source": "solution.xml",
+            }
+        )
+    return rows
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
-def analyze_deps_zip_bytes(zip_bytes: bytes) -> list[dict]:
-    """Analyze a Power Platform solution ZIP and return dependency segments.
+def analyze_deps_zip_bytes_report(zip_bytes: bytes, detailed_diagram: bool = False) -> dict:
+    """Analyze solution ZIP and return a structured dependency report.
 
-    Returns a list of render segments compatible with ``viz_segments``:
-    ``[{"type": "text", "content": markdown}, {"type": "mermaid", "content": mermaid}]``
-
-    Raises ``ValueError`` for clearly invalid input (not a ZIP, no solution.xml).
+    Returns keys:
+      - ``summary_markdown``: textual overview
+      - ``mermaid``: diagram source
+      - ``relation_rows``: de-duplicated rows for table rendering
+      - ``component_rows``: component inventory rows
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
         work_dir = Path(tmp_dir)
@@ -645,10 +693,28 @@ def analyze_deps_zip_bytes(zip_bytes: bytes) -> list[dict]:
                 "or the XML format is not recognised."
             )
 
-        summary_md = _build_summary_md(metadata, components, missing)
-        mermaid = _build_mermaid(metadata, components, missing)
+        # ``detailed_diagram`` is accepted for forward compatibility with richer
+        # diagram builders. Current implementation keeps one diagram style.
+        _ = detailed_diagram
 
-        return [
-            {"type": "text", "content": summary_md},
-            {"type": "mermaid", "content": mermaid},
-        ]
+        return {
+            "summary_markdown": _build_summary_md(metadata, components, missing),
+            "mermaid": _build_mermaid(metadata, components, missing),
+            "relation_rows": _build_relation_rows(missing),
+            "component_rows": _build_component_rows(components),
+        }
+
+
+def analyze_deps_zip_bytes(zip_bytes: bytes) -> list[dict]:
+    """Analyze a Power Platform solution ZIP and return dependency segments.
+
+    Returns a list of render segments compatible with ``viz_segments``:
+    ``[{"type": "text", "content": markdown}, {"type": "mermaid", "content": mermaid}]``
+
+    Raises ``ValueError`` for clearly invalid input (not a ZIP, no solution.xml).
+    """
+    report = analyze_deps_zip_bytes_report(zip_bytes, detailed_diagram=False)
+    return [
+        {"type": "text", "content": report["summary_markdown"]},
+        {"type": "mermaid", "content": report["mermaid"]},
+    ]

@@ -10,7 +10,7 @@ from loguru import logger
 from renamer import inspect_zip, rename_solution_from_bytes  # noqa: E402
 from solution_checker import check_solution_zip  # noqa: E402
 from validator import validate_zip_bytes  # noqa: E402
-from deps_analyzer import analyze_deps_zip_bytes  # noqa: E402
+from deps_analyzer import analyze_deps_zip_bytes_report  # noqa: E402
 
 from web.mermaid import split_markdown_mermaid
 
@@ -47,6 +47,16 @@ class SolutionMixin(rx.State, mixin=True):
     sol_deps_segments: list[dict] = []
     sol_deps_error: str = ""
     sol_is_deps_analyzing: bool = False
+    sol_deps_relation_rows: list[dict] = []
+    sol_deps_component_rows: list[dict] = []
+    sol_deps_diagram_mode: str = "aggregated"
+    sol_deps_diagram_zoom_pct: int = 100
+    sol_deps_relation_query: str = ""
+    sol_deps_relation_sort_key: str = "dependent"
+    sol_deps_relation_sort_dir: str = "asc"
+    sol_deps_component_query: str = ""
+    sol_deps_component_sort_key: str = "name"
+    sol_deps_component_sort_dir: str = "asc"
 
     # Renamer
     sol_rename_new_agent: str = ""
@@ -78,6 +88,62 @@ class SolutionMixin(rx.State, mixin=True):
     def set_sol_rename_new_solution(self, value: str):
         self.sol_rename_new_solution = value
 
+    @rx.event
+    async def set_sol_deps_diagram_mode(self, mode: str):
+        if mode not in ("aggregated", "detailed"):
+            return
+        if self.sol_deps_diagram_mode == mode:
+            return
+        self.sol_deps_diagram_mode = mode
+
+        if not self.sol_zip_bytes:
+            return
+
+        self.sol_is_deps_analyzing = True
+        self.sol_deps_error = ""
+        yield
+        await self._run_deps_analysis()
+
+    @rx.event
+    def set_sol_deps_relation_query(self, value: str):
+        self.sol_deps_relation_query = value
+
+    @rx.event
+    def set_sol_deps_relation_sort(self, key: str):
+        if key not in ("dependent", "dependent_type", "required", "required_type", "source"):
+            return
+        if self.sol_deps_relation_sort_key == key:
+            self.sol_deps_relation_sort_dir = "desc" if self.sol_deps_relation_sort_dir == "asc" else "asc"
+            return
+        self.sol_deps_relation_sort_key = key
+        self.sol_deps_relation_sort_dir = "asc"
+
+    @rx.event
+    def set_sol_deps_component_query(self, value: str):
+        self.sol_deps_component_query = value
+
+    @rx.event
+    def set_sol_deps_component_sort(self, key: str):
+        if key not in ("name", "schema", "type", "type_code", "group", "kind", "source"):
+            return
+        if self.sol_deps_component_sort_key == key:
+            self.sol_deps_component_sort_dir = "desc" if self.sol_deps_component_sort_dir == "asc" else "asc"
+            return
+        self.sol_deps_component_sort_key = key
+        self.sol_deps_component_sort_dir = "asc"
+
+    @rx.event
+    def sol_deps_zoom_in(self):
+        self.sol_deps_diagram_zoom_pct = min(220, self.sol_deps_diagram_zoom_pct + 10)
+
+    @rx.event
+    def sol_deps_zoom_out(self):
+        self.sol_deps_diagram_zoom_pct = max(50, self.sol_deps_diagram_zoom_pct - 10)
+
+    @rx.event
+    def sol_deps_zoom_reset(self):
+        self.sol_deps_diagram_zoom_pct = 100
+
     @rx.var
     def sol_has_zip(self) -> bool:
         return len(self.sol_zip_bytes) > 0
@@ -94,6 +160,74 @@ class SolutionMixin(rx.State, mixin=True):
             return []
         segments = split_markdown_mermaid(self.sol_validate_best_practices_md)
         return [{"type": t, "content": c} for t, c in segments]
+
+    @rx.var
+    def sol_deps_diagram_zoom_style(self) -> str:
+        return f"{self.sol_deps_diagram_zoom_pct}%"
+
+    @rx.var
+    def sol_has_deps_relations(self) -> bool:
+        return bool(self.sol_deps_relation_rows)
+
+    @rx.var
+    def sol_has_deps_components(self) -> bool:
+        return bool(self.sol_deps_component_rows)
+
+    @rx.var
+    def sol_deps_visible_segments(self) -> list[dict]:
+        if self.sol_deps_diagram_mode != "detailed":
+            return self.sol_deps_segments
+        return [seg for seg in self.sol_deps_segments if seg.get("type") == "mermaid"]
+
+    @rx.var
+    def sol_deps_filtered_relation_rows(self) -> list[dict]:
+        rows = list(self.sol_deps_relation_rows)
+
+        query = (self.sol_deps_relation_query or "").strip().lower()
+        if query:
+            rows = [
+                row
+                for row in rows
+                if query in (row.get("dependent", "").lower())
+                or query in (row.get("dependent_type", "").lower())
+                or query in (row.get("required", "").lower())
+                or query in (row.get("required_type", "").lower())
+                or query in (row.get("source", "").lower())
+            ]
+
+        if rows and self.sol_deps_relation_sort_key in rows[0]:
+            sort_key = self.sol_deps_relation_sort_key
+        else:
+            sort_key = "dependent"
+        reverse = self.sol_deps_relation_sort_dir == "desc"
+        rows.sort(key=lambda r: str(r.get(sort_key, "")).lower(), reverse=reverse)
+        return rows
+
+    @rx.var
+    def sol_deps_filtered_component_rows(self) -> list[dict]:
+        rows = list(self.sol_deps_component_rows)
+
+        query = (self.sol_deps_component_query or "").strip().lower()
+        if query:
+            rows = [
+                row
+                for row in rows
+                if query in str(row.get("name", "")).lower()
+                or query in str(row.get("schema", "")).lower()
+                or query in str(row.get("type", "")).lower()
+                or query in str(row.get("type_code", "")).lower()
+                or query in str(row.get("group", "")).lower()
+                or query in str(row.get("kind", "")).lower()
+                or query in str(row.get("source", "")).lower()
+            ]
+
+        if rows and self.sol_deps_component_sort_key in rows[0]:
+            sort_key = self.sol_deps_component_sort_key
+        else:
+            sort_key = "name"
+        reverse = self.sol_deps_component_sort_dir == "desc"
+        rows.sort(key=lambda r: str(r.get(sort_key, "")).lower(), reverse=reverse)
+        return rows
 
     # --- Solution Tools handlers ---
 
@@ -137,6 +271,16 @@ class SolutionMixin(rx.State, mixin=True):
         self.sol_validate_best_practices_md = ""
         self.sol_deps_segments = []
         self.sol_deps_error = ""
+        self.sol_deps_relation_rows = []
+        self.sol_deps_component_rows = []
+        self.sol_deps_diagram_mode = "aggregated"
+        self.sol_deps_diagram_zoom_pct = 100
+        self.sol_deps_relation_query = ""
+        self.sol_deps_relation_sort_key = "dependent"
+        self.sol_deps_relation_sort_dir = "asc"
+        self.sol_deps_component_query = ""
+        self.sol_deps_component_sort_key = "name"
+        self.sol_deps_component_sort_dir = "asc"
         self.sol_rename_result_bytes = b""
         self.sol_rename_result = {}
         self.sol_rename_error = ""
@@ -238,13 +382,28 @@ class SolutionMixin(rx.State, mixin=True):
         self.sol_is_deps_analyzing = True
         self.sol_deps_error = ""
         try:
-            segments = await asyncio.to_thread(analyze_deps_zip_bytes, self.sol_zip_bytes)
-            self.sol_deps_segments = segments
+            report = await asyncio.to_thread(
+                analyze_deps_zip_bytes_report,
+                self.sol_zip_bytes,
+                self.sol_deps_diagram_mode == "detailed",
+            )
+            self.sol_deps_segments = [
+                {"type": "text", "content": report.get("summary_markdown", "")},
+                {"type": "mermaid", "content": report.get("mermaid", "")},
+            ]
+            self.sol_deps_relation_rows = report.get("relation_rows", [])
+            self.sol_deps_component_rows = report.get("component_rows", [])
         except (ValueError, RuntimeError) as e:
             self.sol_deps_error = str(e)
+            self.sol_deps_segments = []
+            self.sol_deps_relation_rows = []
+            self.sol_deps_component_rows = []
         except Exception as e:
             logger.error(f"Deps analysis failed: {e}")
             self.sol_deps_error = f"Analysis failed: {e}"
+            self.sol_deps_segments = []
+            self.sol_deps_relation_rows = []
+            self.sol_deps_component_rows = []
         finally:
             self.sol_is_deps_analyzing = False
 
@@ -334,6 +493,16 @@ class SolutionMixin(rx.State, mixin=True):
         self.sol_validate_best_practices_md = ""
         self.sol_deps_segments = []
         self.sol_deps_error = ""
+        self.sol_deps_relation_rows = []
+        self.sol_deps_component_rows = []
+        self.sol_deps_diagram_mode = "aggregated"
+        self.sol_deps_diagram_zoom_pct = 100
+        self.sol_deps_relation_query = ""
+        self.sol_deps_relation_sort_key = "dependent"
+        self.sol_deps_relation_sort_dir = "asc"
+        self.sol_deps_component_query = ""
+        self.sol_deps_component_sort_key = "name"
+        self.sol_deps_component_sort_dir = "asc"
         self.sol_rename_new_agent = ""
         self.sol_rename_new_solution = ""
         self.sol_rename_result_bytes = b""
