@@ -595,14 +595,11 @@ def _build_summary_md(
             "",
             "> ⚠️ These components are **required** by this solution but are **not included** in the "
             "ZIP. They must be present in the target environment before import will succeed.",
-            "",
-            "| Required Component | Type | Dep ID (first 8 chars) |",
-            "|---|---|---|",
         ]
-        for m in unique_missing:
-            type_name, _ = _type_info(m.req_type)
-            dep_ref = f"`{m.dep_id[:8]}…`" if m.dep_id else "—"
-            lines.append(f"| `{m.req_name or m.req_schema}` | {type_name} | {dep_ref} |")
+        lines += [
+            "",
+            "> See the structured **Required Components** and **Dependency Relations** tables below for details.",
+        ]
     else:
         lines += [
             "",

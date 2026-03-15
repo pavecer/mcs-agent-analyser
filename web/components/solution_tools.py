@@ -349,6 +349,19 @@ def _sol_deps_tab() -> rx.Component:
             width="100%",
         )
 
+    def _deps_required_row(row: dict) -> rx.Component:
+        return rx.grid(
+            rx.text(row["required"], size="1", color="var(--gray-12)", font_weight="600"),
+            rx.badge(row["required_type"], color_scheme="red", variant="soft", size="1"),
+            rx.text(row["dependent"], size="1", color="var(--gray-a10)", font_family=_MONO),
+            columns="2.6fr 1.2fr 1fr",
+            gap="10px",
+            align="center",
+            padding="8px 10px",
+            border_bottom="1px solid var(--gray-a3)",
+            width="100%",
+        )
+
     def _deps_component_row(row: dict) -> rx.Component:
         return rx.grid(
             rx.text(row["name"], size="1", color="var(--gray-12)", font_weight="600"),
@@ -399,11 +412,6 @@ def _sol_deps_tab() -> rx.Component:
                 rx.hstack(
                     rx.icon("network", size=16, color="var(--green-9)"),
                     rx.text("Dependency Diagram", size="2", font_weight="600", color="var(--gray-12)"),
-                    rx.spacer(),
-                    rx.button("-", on_click=State.sol_deps_zoom_out, variant="outline", size="1"),
-                    rx.button("+", on_click=State.sol_deps_zoom_in, variant="outline", size="1"),
-                    rx.button("Reset", on_click=State.sol_deps_zoom_reset, variant="outline", size="1"),
-                    rx.badge(State.sol_deps_diagram_zoom_style, color_scheme="gray", variant="soft", size="1"),
                     spacing="2",
                     align="center",
                     width="100%",
@@ -430,23 +438,73 @@ def _sol_deps_tab() -> rx.Component:
                     State.sol_deps_visible_segments,
                     lambda segment: rx.cond(
                         segment["type"] == "mermaid",
-                        rx.box(
-                            rx.el.pre(
-                                segment["content"],
-                                class_name="mermaid",
-                                width=State.sol_deps_diagram_zoom_style,
-                                min_width=State.sol_deps_diagram_zoom_style,
+                        rx.vstack(
+                            rx.hstack(
+                                rx.spacer(),
+                                rx.button("-", on_click=State.sol_deps_zoom_out, variant="outline", size="1"),
+                                rx.button("+", on_click=State.sol_deps_zoom_in, variant="outline", size="1"),
+                                rx.button("Reset", on_click=State.sol_deps_zoom_reset, variant="outline", size="1"),
+                                rx.badge(State.sol_deps_diagram_zoom_style, color_scheme="gray", variant="soft", size="1"),
+                                spacing="2",
+                                align="center",
+                                width="100%",
                             ),
+                            rx.box(
+                                rx.el.pre(
+                                    segment["content"],
+                                    class_name="mermaid",
+                                    width=State.sol_deps_diagram_zoom_style,
+                                    min_width=State.sol_deps_diagram_zoom_style,
+                                ),
+                                width="100%",
+                                overflow_x="auto",
+                                overflow_y="auto",
+                                padding="16px",
+                                border="1px solid var(--gray-a4)",
+                                border_radius="10px",
+                                background="var(--gray-a2)",
+                            ),
+                            spacing="2",
                             width="100%",
-                            overflow_x="auto",
-                            overflow_y="auto",
-                            padding="16px",
-                            border="1px solid var(--gray-a4)",
-                            border_radius="10px",
-                            background="var(--gray-a2)",
                         ),
                         render_segment(segment),
                     ),
+                ),
+                rx.cond(
+                    (State.sol_deps_diagram_mode != "detailed") & State.sol_has_deps_relations,
+                    rx.box(
+                        rx.hstack(
+                            rx.text("Required Components", size="2", font_weight="600"),
+                            rx.spacer(),
+                            rx.badge(State.sol_deps_relation_rows.length(), variant="soft", size="1"),
+                            width="100%",
+                            align="center",
+                        ),
+                        rx.text(
+                            "Components required by this solution but not contained in the ZIP.",
+                            size="1",
+                            color="var(--gray-a10)",
+                        ),
+                        rx.box(
+                            rx.grid(
+                                rx.text("Required Component", font_size="11px", font_weight="700", color="var(--gray-a10)"),
+                                rx.text("Type", font_size="11px", font_weight="700", color="var(--gray-a10)"),
+                                rx.text("Dep ID", font_size="11px", font_weight="700", color="var(--gray-a10)"),
+                                columns="2.6fr 1.2fr 1fr",
+                                gap="10px",
+                                padding="8px 10px",
+                                background="var(--gray-a3)",
+                            ),
+                            rx.foreach(State.sol_deps_relation_rows, _deps_required_row),
+                            max_height="320px",
+                            overflow_y="auto",
+                            border="1px solid var(--gray-a4)",
+                            border_radius="10px",
+                        ),
+                        spacing="3",
+                        width="100%",
+                    ),
+                    rx.fragment(),
                 ),
                 rx.cond(
                     (State.sol_deps_diagram_mode != "detailed") & State.sol_has_deps_components,
