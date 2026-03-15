@@ -48,7 +48,7 @@ def _upload_zone(label: str, upload_id: str, bot_name: str, handler) -> rx.Compo
         rx.cond(
             bot_name != "",
             rx.hstack(
-                rx.icon("circle-check", size=14, color="var(--green-9)"),
+                rx.icon("check", size=14, color="var(--green-9)"),
                 rx.text(bot_name, size="2", color="var(--green-11)", font_family=_MONO),
                 spacing="2",
                 align="center",

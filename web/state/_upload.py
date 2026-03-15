@@ -378,7 +378,7 @@ class UploadMixin(rx.State, mixin=True):
         quick_wins: list[dict] = []
         for comp in profile.components:
             if comp.kind == "DialogComponent" and comp.state != "Active":
-                quick_wins.append({"severity": "warn", "icon": "alert-triangle", "text": f'Disabled topic: "{comp.display_name}"'})
+                quick_wins.append({"severity": "warn", "icon": "triangle_alert", "text": f'Disabled topic: "{comp.display_name}"'})
         for comp in profile.components:
             if (
                 comp.kind == "DialogComponent"
@@ -387,7 +387,7 @@ class UploadMixin(rx.State, mixin=True):
                 and comp.trigger_kind not in _SYSTEM_TRIGGERS
                 and comp.trigger_kind not in _AUTOMATION_TRIGGERS
             ):
-                quick_wins.append({"severity": "warn", "icon": "alert-triangle", "text": f'No trigger queries: "{comp.display_name}"'})
+                quick_wins.append({"severity": "warn", "icon": "triangle_alert", "text": f'No trigger queries: "{comp.display_name}"'})
         for comp in profile.components:
             if comp.kind == "DialogComponent":
                 desc = comp.description
@@ -396,11 +396,11 @@ class UploadMixin(rx.State, mixin=True):
         trigger_kinds = {c.trigger_kind for c in profile.components if c.trigger_kind}
         for trigger in ("OnError", "OnUnknownIntent", "OnEscalate"):
             if trigger not in trigger_kinds:
-                quick_wins.append({"severity": "warn", "icon": "alert-triangle", "text": f"Missing system topic: {trigger}"})
+                quick_wins.append({"severity": "warn", "icon": "triangle_alert", "text": f"Missing system topic: {trigger}"})
         conn_issues = validate_connections(profile)
         for issue in conn_issues:
             sev = "warn" if issue["severity"] == "warning" else "info"
-            quick_wins.append({"severity": sev, "icon": "alert-triangle" if sev == "warn" else "info", "text": issue["message"]})
+            quick_wins.append({"severity": sev, "icon": "triangle_alert" if sev == "warn" else "info", "text": issue["message"]})
 
         # KPIs
         total_comps = sum(len(v) for v in by_cat.values())

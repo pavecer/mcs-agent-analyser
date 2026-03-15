@@ -260,7 +260,7 @@ def _mcs_flow_event(item: dict) -> rx.Component:
         rx.box(
             rx.hstack(
                 rx.icon(
-                    rx.cond(is_error, "triangle-alert", "workflow"),
+                    rx.cond(is_error, "triangle_alert", "workflow"),
                     size=16,
                     color=rx.cond(is_error, "var(--red-9)", PRIMARY),
                 ),
@@ -991,7 +991,7 @@ def _mcs_ks_search_card(item: dict) -> rx.Component:
                 item["errors"] != "",
                 rx.box(
                     rx.hstack(
-                        rx.icon("triangle-alert", size=12, color="var(--red-9)"),
+                        rx.icon("triangle_alert", size=12, color="var(--red-9)"),
                         rx.text(item["errors"], font_size="12px", color="var(--red-11)"),
                         spacing="2",
                         align="center",
@@ -1403,7 +1403,7 @@ def _mcs_model_panel() -> rx.Component:
             rx.grid(
                 card(
                     rx.hstack(
-                        rx.icon("circle-check", size=16, color="var(--green-9)"),
+                        rx.icon("check", size=16, color="var(--green-9)"),
                         rx.text("Strengths", font_size="14px", font_weight="700", color="var(--gray-12)"),
                         spacing="2",
                         align="center",
@@ -1426,7 +1426,7 @@ def _mcs_model_panel() -> rx.Component:
                 ),
                 card(
                     rx.hstack(
-                        rx.icon("triangle-alert", size=16, color="var(--amber-9)"),
+                        rx.icon("triangle_alert", size=16, color="var(--amber-9)"),
                         rx.text("Limitations", font_size="14px", font_weight="700", color="var(--gray-12)"),
                         spacing="2",
                         align="center",
@@ -1553,7 +1553,7 @@ def _mcs_conv_event_row(item: dict) -> rx.Component:
 def _mcs_conv_error_item(error: str) -> rx.Component:
     return rx.box(
         rx.hstack(
-            rx.icon("triangle-alert", size=14, color="var(--red-9)"),
+            rx.icon("triangle_alert", size=14, color="var(--red-9)"),
             rx.text(error, font_size="13px", color="var(--red-11)"),
             spacing="2",
             align="start",
@@ -1664,7 +1664,7 @@ def _mcs_conversation_detail_panel() -> rx.Component:
                 State.mcs_conv_errors.length() > 0,  # type: ignore[union-attr]
                 card(
                     rx.hstack(
-                        rx.icon("triangle-alert", size=16, color="var(--red-9)"),
+                        rx.icon("triangle_alert", size=16, color="var(--red-9)"),
                         section_heading("Errors"),
                         rx.spacer(),
                         rx.badge(

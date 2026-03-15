@@ -118,7 +118,7 @@ def _sol_check_tab() -> rx.Component:
                 rx.hstack(
                     rx.badge(
                         rx.hstack(
-                            rx.icon("circle-check", size=12), rx.text(State.sol_check_pass), spacing="1", align="center"
+                            rx.icon("check", size=12), rx.text(State.sol_check_pass), spacing="1", align="center"
                         ),
                         color_scheme="green",
                         variant="soft",
@@ -126,7 +126,7 @@ def _sol_check_tab() -> rx.Component:
                     ),
                     rx.badge(
                         rx.hstack(
-                            rx.icon("triangle-alert", size=12),
+                            rx.icon("triangle_alert", size=12),
                             rx.text(State.sol_check_warn),
                             spacing="1",
                             align="center",
@@ -137,7 +137,7 @@ def _sol_check_tab() -> rx.Component:
                     ),
                     rx.badge(
                         rx.hstack(
-                            rx.icon("circle-x", size=12), rx.text(State.sol_check_fail), spacing="1", align="center"
+                            rx.icon("x", size=12), rx.text(State.sol_check_fail), spacing="1", align="center"
                         ),
                         color_scheme="red",
                         variant="soft",
@@ -725,7 +725,7 @@ def _sol_rename_tab() -> rx.Component:
                         ),
                         spacing="1",
                     ),
-                    icon="circle-check",
+                    icon="check",
                     color_scheme="green",
                     size="1",
                     width="100%",
@@ -831,7 +831,7 @@ def solution_tools_form() -> rx.Component:
                                 rx.box(
                                     rx.vstack(
                                         rx.hstack(
-                                            rx.icon("circle-check", size=14, color="var(--green-9)"),
+                                            rx.icon("check", size=14, color="var(--green-9)"),
                                             rx.text("File ready to upload", size="2", color="var(--green-11)"),
                                             align="center",
                                             spacing="2",

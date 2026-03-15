@@ -375,7 +375,7 @@ def import_transcript_list() -> rx.Component:
         rx.hstack(
             rx.badge(
                 rx.hstack(
-                    rx.icon("circle-check", size=12),
+                    rx.icon("check", size=12),
                     rx.text("Connected", size="1"),
                     spacing="1",
                     align="center",
