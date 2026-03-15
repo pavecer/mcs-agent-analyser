@@ -62,7 +62,7 @@ from renderer import (
     render_transcript_report,
 )
 from timeline import build_timeline, estimate_credits
-from transcript import parse_transcript_json
+from transcript import parse_transcript_json as _parse_transcript_json
 
 import instruction_store
 from instruction_store import get_history, save_snapshot
@@ -70,6 +70,34 @@ from models import InstructionDiff
 from renderer import render_instruction_drift
 
 BASE_DIR = Path(__file__).parent.parent
+
+
+def _fixture_path_or_skip(path: Path) -> Path:
+    try:
+        path.relative_to(BASE_DIR)
+    except ValueError:
+        return path
+
+    if path.exists():
+        return path
+
+    pytest.skip(f"Missing local sample fixture: {path.relative_to(BASE_DIR)}")
+
+
+_parse_yaml = parse_yaml
+_parse_dialog_json = parse_dialog_json
+
+
+def parse_yaml(path, *args, **kwargs):
+    return _parse_yaml(_fixture_path_or_skip(Path(path)), *args, **kwargs)
+
+
+def parse_dialog_json(path, *args, **kwargs):
+    return _parse_dialog_json(_fixture_path_or_skip(Path(path)), *args, **kwargs)
+
+
+def parse_transcript_json(path, *args, **kwargs):
+    return _parse_transcript_json(_fixture_path_or_skip(Path(path)), *args, **kwargs)
 
 
 # --- YAML parsing tests ---

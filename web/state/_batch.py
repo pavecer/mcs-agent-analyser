@@ -1,6 +1,5 @@
 import json
 import tempfile
-from pathlib import Path
 
 import reflex as rx
 from loguru import logger
@@ -8,6 +7,7 @@ from loguru import logger
 from batch_analytics import aggregate_timelines, render_batch_report
 from timeline import build_timeline
 from transcript import parse_transcript_json
+from utils import safe_temp_path
 
 BATCH_UPLOAD_ID = "batch_upload"
 
@@ -54,7 +54,7 @@ class BatchMixin(rx.State, mixin=True):
                 yield
 
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    json_path = Path(tmpdir) / upload_file.filename
+                    json_path = safe_temp_path(tmpdir, upload_file.filename, "transcript.json")
                     json_path.write_bytes(data)
 
                     try:

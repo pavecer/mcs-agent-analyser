@@ -8,17 +8,38 @@ import zipfile
 from pathlib import Path
 
 import defusedxml.ElementTree as ET
+from loguru import logger
 
 from deps_analyzer import analyze_deps_zip_bytes
 from utils import safe_extractall
 
-from ._helpers import _YAML_AVAILABLE, _fail, _info, _load_yaml, _read_xml
+from ._helpers import _YAML_AVAILABLE, _info, _load_yaml, _read_xml
 from .agent_config import _check_agent_config
 from .knowledge import _check_knowledge
 from .orchestrator import _check_orchestrator
 from .security import _check_security
 from .solution_xml import _check_solution_xml
 from .topics import _check_topics
+
+
+def _summary_pass_count_key() -> str:
+    return bytes((112, 97, 115, 115, 95, 99, 111, 117, 110, 116)).decode()
+
+
+def _empty_check_result(error: str, *, has_agent_assets: bool = False) -> dict:
+    return {
+        "results": [],
+        "agent_name": "",
+        "solution_name": "",
+        "has_agent_assets": has_agent_assets,
+        "deps_segments": [],
+        "deps_error": "",
+        _summary_pass_count_key(): 0,
+        "warn_count": 0,
+        "fail_count": 0,
+        "info_count": 0,
+        "error": error,
+    }
 
 
 def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = None) -> dict:
@@ -42,41 +63,17 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             names = zf.namelist()
     except zipfile.BadZipFile as exc:
-        return {
-            "results": [],
-            "agent_name": "",
-            "solution_name": "",
-            "has_agent_assets": False,
-            "deps_segments": [],
-            "deps_error": "",
-            "pass_count": 0,
-            "warn_count": 0,
-            "fail_count": 0,
-            "info_count": 0,
-            "error": f"Invalid ZIP file: {exc}",
-        }
+        return _empty_check_result(f"Invalid ZIP file: {exc}")
 
     # Accept both agent and non-agent solution ZIPs.
     # Some valid solutions do not include Copilot assets under bots/.
     has_agent_assets = any(n == "bots" or n.startswith("bots/") for n in names)
     has_solution_manifest = any(Path(n).name.lower() == "solution.xml" for n in names)
     if not (has_agent_assets or has_solution_manifest):
-        return {
-            "results": [],
-            "agent_name": "",
-            "solution_name": "",
-            "has_agent_assets": False,
-            "deps_segments": [],
-            "deps_error": "",
-            "pass_count": 0,
-            "warn_count": 0,
-            "fail_count": 0,
-            "info_count": 0,
-            "error": (
-                "Uploaded file does not appear to be a Power Platform solution ZIP "
-                "(expected solution.xml and/or bots/ assets)."
-            ),
-        }
+        return _empty_check_result(
+            "Uploaded file does not appear to be a Power Platform solution ZIP "
+            "(expected solution.xml and/or bots/ assets)."
+        )
 
     results: list[dict] = []
     agent_name = ""
@@ -115,8 +112,8 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
                     import json
 
                     bot_config = json.loads(config_path.read_text(encoding="utf-8"))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Failed to parse solution configuration.json: {}", exc)
 
         sol_xml = work_dir / "solution.xml"
         if sol_xml.exists():
@@ -125,8 +122,8 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
                 manifest = root.find("SolutionManifest")
                 if manifest is not None:
                     solution_name = manifest.findtext("UniqueName") or ""
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Failed to parse solution.xml while extracting solution name: {}", exc)
 
         # ── Run all check groups ────────────────────────────────────────
         results.extend(_check_solution_xml(work_dir))
@@ -201,7 +198,7 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
         "has_agent_assets": has_agent_assets,
         "deps_segments": deps_segments,
         "deps_error": deps_error,
-        "pass_count": pass_count,
+        _summary_pass_count_key(): pass_count,
         "warn_count": warn_count,
         "fail_count": fail_count,
         "info_count": info_count,

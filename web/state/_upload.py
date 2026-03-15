@@ -28,7 +28,7 @@ from renderer.sections import (  # noqa: E402
 )
 from timeline import build_timeline  # noqa: E402
 from transcript import parse_transcript_json  # noqa: E402
-from utils import safe_extractall  # noqa: E402
+from utils import safe_extractall, safe_temp_path  # noqa: E402
 
 from web.state._base import _clear_bot_profile, _save_bot_profile
 
@@ -156,7 +156,7 @@ class UploadMixin(rx.State, mixin=True):
         data = await upload_file.read()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            zip_path = Path(tmpdir) / upload_file.filename
+            zip_path = safe_temp_path(tmpdir, upload_file.filename, "upload.zip")
             zip_path.write_bytes(data)
 
             if not zipfile.is_zipfile(zip_path):
@@ -204,7 +204,8 @@ class UploadMixin(rx.State, mixin=True):
 
             for f in files:
                 data = await f.read()
-                fpath = Path(tmpdir) / f.filename
+                default_name = "upload.json" if f.filename.endswith(".json") else "upload.yml"
+                fpath = safe_temp_path(tmpdir, f.filename, default_name)
                 fpath.write_bytes(data)
                 if f.filename.endswith(".yml") or f.filename.endswith(".yaml"):
                     yml_path = fpath
@@ -243,7 +244,7 @@ class UploadMixin(rx.State, mixin=True):
         data = await upload_file.read()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            json_path = Path(tmpdir) / upload_file.filename
+            json_path = safe_temp_path(tmpdir, upload_file.filename, "transcript.json")
             json_path.write_bytes(data)
 
             activities, metadata = parse_transcript_json(json_path)

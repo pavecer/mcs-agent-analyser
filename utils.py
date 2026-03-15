@@ -16,10 +16,30 @@ def sanitize_yaml(text: str) -> str:
     return text
 
 
+def safe_temp_path(base_dir: str | Path, filename: str | None, default_name: str) -> Path:
+    """Build a temp path from an untrusted filename without allowing path injection."""
+    candidate = Path(filename or "").name
+    if not candidate:
+        candidate = default_name
+    return Path(base_dir) / candidate
+
+
+def is_zip_filename(filename: str | None) -> bool:
+    """Return True when the provided filename has a .zip suffix."""
+    return Path(filename or "").suffix.lower() == ".zip"
+
+
 def safe_extractall(zf: zipfile.ZipFile, dest: Path) -> None:
     """Extract a ZIP, rejecting any entries that would escape *dest* via path traversal."""
     dest_resolved = dest.resolve()
     for info in zf.infolist():
+        if Path(info.filename).is_absolute():
+            raise ValueError(f"Rejected unsafe ZIP entry: {info.filename!r}")
+        if info.filename.endswith("/"):
+            continue
+        mode = (info.external_attr >> 16) & 0o170000
+        if mode == 0o120000:
+            raise ValueError(f"Rejected symlink ZIP entry: {info.filename!r}")
         target = (dest_resolved / info.filename).resolve()
         if not target.is_relative_to(dest_resolved):
             raise ValueError(f"Rejected unsafe ZIP entry: {info.filename!r}")

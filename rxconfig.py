@@ -18,5 +18,6 @@ else:
 
 config = rx.Config(
     app_name="web",
+    disable_plugins=["reflex.plugins.sitemap.SitemapPlugin"],
     **_port_cfg,
 )

@@ -11,6 +11,7 @@ from renamer import inspect_zip, rename_solution_from_bytes  # noqa: E402
 from solution_checker import check_solution_zip  # noqa: E402
 from validator import validate_zip_bytes  # noqa: E402
 from deps_analyzer import analyze_deps_zip_bytes_report  # noqa: E402
+from utils import is_zip_filename  # noqa: E402
 
 from web.mermaid import split_markdown_mermaid
 
@@ -235,9 +236,27 @@ class SolutionMixin(rx.State, mixin=True):
     async def handle_solution_upload(self, files: list[rx.UploadFile]):
         if not files:
             return
+        if len(files) != 1:
+            self.sol_zip_bytes = b""
+            self.sol_zip_name = ""
+            self.sol_check_error = "Upload exactly one solution ZIP file."
+            self.sol_validate_error = ""
+            self.sol_deps_error = ""
+            self.sol_rename_error = ""
+            return
         upload_file = files[0]
+        if not is_zip_filename(upload_file.filename):
+            self.sol_zip_bytes = b""
+            self.sol_zip_name = ""
+            self.sol_has_agent_assets = False
+            self.sol_check_error = "Only .zip solution exports are supported."
+            self.sol_validate_error = ""
+            self.sol_deps_error = ""
+            self.sol_rename_error = ""
+            return
         data = await upload_file.read()
         if not data:
+            self.sol_check_error = "Uploaded ZIP file is empty."
             return
 
         self.sol_zip_bytes = data

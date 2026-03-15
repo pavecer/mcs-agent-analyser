@@ -67,7 +67,7 @@ uv sync
 uv run reflex run
 ```
 
-Open http://localhost:3000, sign in, upload a `.zip` bot export or connect to Dataverse.
+Open [http://localhost:3000](http://localhost:3000), sign in, upload a `.zip` bot export or connect to Dataverse.
 
 > **Privacy note:** Deploy this locally or self-host in your own Azure tenant. Bot exports and Dataverse data never leave your machine. The only external call is to OpenAI or Anthropic if you use the Instruction Lint feature.
 
@@ -159,6 +159,7 @@ rules:
 **Field paths** reference `BotProfile` attributes using dot notation. Use `[]` for array fields (e.g. `channels`, `knowledge_sources`).
 
 **Supported operators:**
+
 - `eq` — field equals the given value
 - `not_exists` — field is `None` or missing
 - `not_contains` — string field does not contain the given substring
@@ -180,6 +181,7 @@ CUSTOM_RULES_FILE=data/default_rules.yaml
 ## What It Extracts
 
 **From `botContent.yml`:**
+
 - Bot metadata (name, ID, channels, recognizer, orchestrator detection)
 - AI configuration (GPT component model, instructions, knowledge sources, capabilities)
 - All components with kind, state, triggers, dialog types
@@ -189,27 +191,32 @@ CUSTOM_RULES_FILE=data/default_rules.yaml
 - MCS credit estimation
 
 **From `dialog.json`:**
+
 - Full conversation timeline (user messages, bot responses, plan steps, knowledge searches, errors)
 - Execution phases with duration and status
 - Mermaid sequence diagram of the conversation flow
 - Mermaid Gantt chart of execution timing
 
 **From Dataverse (live connection):**
+
 - Bot config and all components fetched via Web API
 - Auto-triggers full bot analysis after device-code authentication
 - Conversation transcripts with browse, search, and single-ID lookup
 - Schema lookup preserved across transcript analyses for accurate topic resolution
 
 **From transcript `.json` files:**
+
 - Session metadata (outcome, outcome reason, turn count, implied success, duration)
 - Variable assignments and dialog redirects
 - Same conversation timeline rendering (sequence diagram, Gantt chart, event log)
 
 **Quick Wins (custom rules):**
+
 - Evaluated against `BotProfile` with emoji severity indicators (🔴 🟡 🔵)
 - Styled badges rendered in the analysis report
 
 **Instruction Lint (AI-powered):**
+
 - Audit of bot instructions, guardrails, topic architecture, and component health
 - Automatically detects the bot's AI model provider (OpenAI or Anthropic) and uses the matching API
 - Requires `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` in `.env` (depending on the bot's configured model)
@@ -243,12 +250,14 @@ Transcript reports contain:
 Aggregate multiple conversation transcripts to get a bird's-eye view of bot performance.
 
 **What it aggregates:**
+
 - Total conversations, success/failure/escalation rates
 - Topic usage frequency
 - Error patterns and common failure reasons
 - MCS credit estimates across conversations
 
 **How to use:**
+
 1. Connect to Dataverse and fetch transcripts
 2. Select the transcripts you want to analyse
 3. Click **Run Batch Analysis** — results render on the `/batch` page
@@ -258,12 +267,14 @@ Aggregate multiple conversation transcripts to get a bird's-eye view of bot perf
 Compare two bot exports side by side to understand what changed between versions or environments.
 
 **What it compares:**
+
 - Components added, removed, and changed
 - Instructions diff (line-by-line)
 - Topic connection changes
 - Settings differences
 
 **How to use:**
+
 1. Navigate to `/compare`
 2. Upload two bot exports (`.zip` or `botContent.yml` + `dialog.json`)
 3. View the diff report with additions, removals, and changes highlighted
@@ -280,6 +291,7 @@ Four tools for working with Power Platform solution ZIP exports, available on th
 | **Rename** | Renames solution components (publisher prefix, display names) |
 
 Built-in check categories:
+
 - **SOL** — solution-level checks (structure, metadata)
 - **AGT** — agent/bot configuration checks
 - **TOP** — topic structure and trigger checks
@@ -289,7 +301,7 @@ Built-in check categories:
 
 Custom rules (from your YAML file) also run during solution checks alongside these built-in categories.
 
-## Configuration
+## Runtime Configuration
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -346,7 +358,7 @@ uv run reflex run          # dev server — frontend :3000, backend :8000
 
 ## Project Structure
 
-```
+```text
 main.py                  CLI entry point (Typer)
 models.py                Pydantic models (BotProfile, ConversationTimeline, GptInfo, TopicConnection)
 parser.py                YAML + JSON parsing, GPT extraction, topic connection extraction

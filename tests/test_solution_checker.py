@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import io
+import tempfile
 import zipfile
+from pathlib import Path
 
 from deps_analyzer import analyze_deps_zip_bytes, analyze_deps_zip_bytes_report
 from solution_checker import check_solution_zip
+from utils import is_zip_filename, safe_extractall, safe_temp_path
 
 
 def _zip_bytes(files: dict[str, str]) -> bytes:
@@ -161,3 +164,35 @@ def test_deps_segments_api_remains_backward_compatible():
     assert segments[1]["type"] == "mermaid"
     assert segments[0]["content"]
     assert segments[1]["content"]
+
+
+def test_safe_extractall_rejects_path_traversal_entries():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("../escape.txt", "blocked")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as zf:
+            try:
+                safe_extractall(zf, Path(tmpdir))
+            except ValueError as exc:
+                assert "unsafe ZIP entry" in str(exc)
+            else:
+                raise AssertionError("Expected unsafe ZIP entry to be rejected")
+
+
+def test_safe_temp_path_strips_directory_components():
+    path = safe_temp_path("/tmp/work", "../../nested/botContent.yml", "fallback.yml")
+    assert path == Path("/tmp/work") / "botContent.yml"
+
+
+def test_safe_temp_path_uses_default_for_empty_filename():
+    path = safe_temp_path("/tmp/work", "", "fallback.zip")
+    assert path == Path("/tmp/work") / "fallback.zip"
+
+
+def test_is_zip_filename_accepts_zip_only():
+  assert is_zip_filename("solution.zip") is True
+  assert is_zip_filename("solution.ZIP") is True
+  assert is_zip_filename("solution.json") is False
+  assert is_zip_filename(None) is False

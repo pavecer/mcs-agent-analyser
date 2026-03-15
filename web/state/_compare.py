@@ -9,7 +9,7 @@ from loguru import logger
 
 from models import BotProfile
 from parser import parse_yaml
-from utils import safe_extractall
+from utils import safe_extractall, safe_temp_path
 
 from diff import compare_bots, render_diff_report
 from web.mermaid import split_markdown_mermaid
@@ -69,7 +69,7 @@ class ComparisonMixin(rx.State, mixin=True):
         data = await upload_file.read()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            zip_path = Path(tmpdir) / upload_file.filename
+            zip_path = safe_temp_path(tmpdir, upload_file.filename, "compare.zip")
             zip_path.write_bytes(data)
 
             if not zipfile.is_zipfile(zip_path):

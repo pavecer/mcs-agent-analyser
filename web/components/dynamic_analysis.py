@@ -1403,7 +1403,7 @@ def _mcs_model_panel() -> rx.Component:
             rx.grid(
                 card(
                     rx.hstack(
-                        rx.icon("check-circle", size=16, color="var(--green-9)"),
+                        rx.icon("circle-check", size=16, color="var(--green-9)"),
                         rx.text("Strengths", font_size="14px", font_weight="700", color="var(--gray-12)"),
                         spacing="2",
                         align="center",
@@ -1426,7 +1426,7 @@ def _mcs_model_panel() -> rx.Component:
                 ),
                 card(
                     rx.hstack(
-                        rx.icon("alert-triangle", size=16, color="var(--amber-9)"),
+                        rx.icon("triangle-alert", size=16, color="var(--amber-9)"),
                         rx.text("Limitations", font_size="14px", font_weight="700", color="var(--gray-12)"),
                         spacing="2",
                         align="center",

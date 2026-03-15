@@ -118,7 +118,7 @@ def _sol_check_tab() -> rx.Component:
                 rx.hstack(
                     rx.badge(
                         rx.hstack(
-                            rx.icon("check-circle", size=12), rx.text(State.sol_check_pass), spacing="1", align="center"
+                            rx.icon("circle-check", size=12), rx.text(State.sol_check_pass), spacing="1", align="center"
                         ),
                         color_scheme="green",
                         variant="soft",
@@ -126,7 +126,7 @@ def _sol_check_tab() -> rx.Component:
                     ),
                     rx.badge(
                         rx.hstack(
-                            rx.icon("alert-triangle", size=12),
+                            rx.icon("triangle-alert", size=12),
                             rx.text(State.sol_check_warn),
                             spacing="1",
                             align="center",
@@ -137,7 +137,7 @@ def _sol_check_tab() -> rx.Component:
                     ),
                     rx.badge(
                         rx.hstack(
-                            rx.icon("x-circle", size=12), rx.text(State.sol_check_fail), spacing="1", align="center"
+                            rx.icon("circle-x", size=12), rx.text(State.sol_check_fail), spacing="1", align="center"
                         ),
                         color_scheme="red",
                         variant="soft",
@@ -725,7 +725,7 @@ def _sol_rename_tab() -> rx.Component:
                         ),
                         spacing="1",
                     ),
-                    icon="check-circle",
+                    icon="circle-check",
                     color_scheme="green",
                     size="1",
                     width="100%",
@@ -806,7 +806,7 @@ def solution_tools_form() -> rx.Component:
                                         display="inline-flex",
                                     ),
                                     rx.text(
-                                        "Drop a solution ZIP or click to browse",
+                                        "Drop a solution ZIP (.zip) or click to browse",
                                         size="3",
                                         color="var(--gray-11)",
                                         font_weight="500",
