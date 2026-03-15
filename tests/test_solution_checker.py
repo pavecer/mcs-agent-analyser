@@ -167,6 +167,46 @@ def test_deps_segments_api_remains_backward_compatible():
     assert segments[1]["content"]
 
 
+def test_deps_mermaid_escapes_problematic_missing_dependency_names():
+    zip_bytes = _zip_bytes(
+        {
+            "solution.xml": """
+<ImportExportXml>
+  <SolutionManifest>
+    <UniqueName>EscapingSolution</UniqueName>
+    <Version>1.0.0.0</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>contoso</UniqueName>
+      <CustomizationPrefix>cts</CustomizationPrefix>
+    </Publisher>
+    <Descriptions>
+      <Description description="Escaping test" />
+    </Descriptions>
+    <RootComponents>
+      <RootComponent type="430" id="{aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb}" schemaName="cts_agent" />
+    </RootComponents>
+    <MissingDependencies>
+      <MissingDependency>
+        <Required type="401" displayName="[ESSPRMPT] ServiceNow Items AC&quot;" schemaName="svc_now_items" />
+        <Dependent id="{aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb}" />
+      </MissingDependency>
+    </MissingDependencies>
+  </SolutionManifest>
+</ImportExportXml>
+""".strip(),
+        }
+    )
+
+    report = analyze_deps_zip_bytes_report(zip_bytes, detailed_diagram=True)
+    mermaid = report["mermaid"]
+
+    assert "flowchart TD" in mermaid
+    assert "MDEP0" in mermaid
+    assert "\"\"]" not in mermaid
+    assert "[ESSPRMPT]" not in mermaid
+
+
 def test_safe_extractall_rejects_path_traversal_entries():
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:

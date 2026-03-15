@@ -300,7 +300,14 @@ def _esc(text: str) -> str:
     """Sanitise a string for use inside a Mermaid double-quoted label."""
     if not text:
         return ""
-    return text.replace('"', "'").replace("\n", " ").replace("\r", "").strip()[:60]
+    # Keep labels parse-safe in Mermaid even when source names contain quotes
+    # or bracket characters from solution metadata.
+    cleaned = str(text)
+    cleaned = cleaned.replace("\n", " ").replace("\r", " ")
+    cleaned = re.sub(r'["“”`]', "'", cleaned)
+    cleaned = cleaned.translate(str.maketrans({"[": "(", "]": ")", "{": "(", "}": ")", "|": "/"}))
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned[:60]
 
 
 def _node(nid: str, label: str, shape: str = "rect") -> str:

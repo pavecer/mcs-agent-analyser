@@ -155,6 +155,49 @@ class SolutionMixin(rx.State, mixin=True):
             return self.sol_check_results
         return [r for r in self.sol_check_results if r.get("category") == self.sol_check_active_category]
 
+    def _has_check_category(self, category: str, *, ignore_rule_ids: set[str] | None = None) -> bool:
+        ignored = ignore_rule_ids or set()
+        return any(
+            r.get("category") == category and (r.get("rule_id") not in ignored)
+            for r in self.sol_check_results
+        )
+
+    @rx.var
+    def sol_show_solution_filter(self) -> bool:
+        return self._has_check_category("Solution")
+
+    @rx.var
+    def sol_show_agent_filter(self) -> bool:
+        # AGT000 is an informational "no agent assets" marker and should not force an Agent tab.
+        return self._has_check_category("Agent", ignore_rule_ids={"AGT000"})
+
+    @rx.var
+    def sol_show_topics_filter(self) -> bool:
+        return self._has_check_category("Topics")
+
+    @rx.var
+    def sol_show_knowledge_filter(self) -> bool:
+        return self._has_check_category("Knowledge")
+
+    @rx.var
+    def sol_show_security_filter(self) -> bool:
+        return self._has_check_category("Security")
+
+    def _normalize_check_active_category(self) -> None:
+        valid_categories = {"All"}
+        if self.sol_show_solution_filter:
+            valid_categories.add("Solution")
+        if self.sol_show_agent_filter:
+            valid_categories.add("Agent")
+        if self.sol_show_topics_filter:
+            valid_categories.add("Topics")
+        if self.sol_show_knowledge_filter:
+            valid_categories.add("Knowledge")
+        if self.sol_show_security_filter:
+            valid_categories.add("Security")
+        if self.sol_check_active_category not in valid_categories:
+            self.sol_check_active_category = "All"
+
     @rx.var
     def sol_validate_bp_segments(self) -> list[dict[str, str]]:
         if not self.sol_validate_best_practices_md:
@@ -360,6 +403,7 @@ class SolutionMixin(rx.State, mixin=True):
             error = result.get("error", "")
             if error:
                 self.sol_check_error = error
+            self._normalize_check_active_category()
         except Exception as e:
             logger.error(f"Solution check failed: {e}")
             self.sol_check_error = f"Check failed: {e}"
