@@ -11,7 +11,7 @@ from renamer import inspect_zip, rename_solution_from_bytes  # noqa: E402
 from solution_checker import check_solution_zip  # noqa: E402
 from validator import validate_zip_bytes  # noqa: E402
 from deps_analyzer import analyze_deps_zip_bytes_report  # noqa: E402
-from utils import is_zip_filename  # noqa: E402
+from utils import is_zip_filename, zip_has_agent_assets  # noqa: E402
 
 from web.mermaid import split_markdown_mermaid
 
@@ -71,7 +71,7 @@ class SolutionMixin(rx.State, mixin=True):
     # Setters
     @rx.event
     def set_sol_active_tab(self, value: str):
-        if value == "rename" and not self.sol_has_agent_assets:
+        if value in ("rename", "validate") and not self.sol_has_agent_assets:
             # Non-agent solutions should never open the Rename view.
             self.sol_active_tab = "check"
             return
@@ -267,11 +267,11 @@ class SolutionMixin(rx.State, mixin=True):
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as zf:
                 names = zf.namelist()
-            self.sol_has_agent_assets = any(n == "bots" or n.startswith("bots/") for n in names)
+            self.sol_has_agent_assets = zip_has_agent_assets(names)
         except Exception:
             self.sol_has_agent_assets = False
 
-        if not self.sol_has_agent_assets and self.sol_active_tab == "rename":
+        if not self.sol_has_agent_assets and self.sol_active_tab in ("rename", "validate"):
             self.sol_active_tab = "check"
 
         # Reset all results
@@ -317,14 +317,15 @@ class SolutionMixin(rx.State, mixin=True):
 
         # Auto-trigger read-only analyses
         self.sol_is_checking = True
-        self.sol_is_validating = True
+        self.sol_is_validating = self.sol_has_agent_assets
         self.sol_is_deps_analyzing = True
         yield
 
         await self._run_solution_check()
         yield
-        await self._run_solution_validate()
-        yield
+        if self.sol_has_agent_assets:
+            await self._run_solution_validate()
+            yield
         await self._run_deps_analysis()
         yield
         await self._refresh_community_count()  # type: ignore[attr-defined]
@@ -392,6 +393,9 @@ class SolutionMixin(rx.State, mixin=True):
     async def run_solution_validate(self):
         if not self.sol_zip_bytes:
             self.sol_validate_error = "No solution ZIP uploaded."
+            return
+        if not self.sol_has_agent_assets:
+            self.sol_validate_error = "Validate is available only for solutions containing Copilot agent assets (bots/)."
             return
         self.sol_is_validating = True
         yield

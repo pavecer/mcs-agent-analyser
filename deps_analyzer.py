@@ -22,7 +22,7 @@ from pathlib import Path
 
 import defusedxml.ElementTree as ET
 
-from utils import safe_extractall
+from utils import find_solution_root, safe_extractall
 
 # ── Component type registry ────────────────────────────────────────────────────
 
@@ -677,18 +677,13 @@ def analyze_deps_zip_bytes_report(zip_bytes: bytes, detailed_diagram: bool = Fal
         except zipfile.BadZipFile as exc:
             raise ValueError("Uploaded file is not a valid ZIP archive.") from exc
 
-        sol_path = work_dir / "solution.xml"
-        if not sol_path.exists():
+        solution_root = find_solution_root(work_dir)
+        if solution_root is None:
             raise ValueError("No solution.xml found — this does not appear to be a Power Platform solution export.")
+        sol_path = solution_root / "solution.xml"
 
         metadata, components, missing = _parse_solution_xml(sol_path)
-        _enrich_from_files(components, work_dir)
-
-        if not components:
-            raise ValueError(
-                "solution.xml contains no RootComponents — the solution may be empty "
-                "or the XML format is not recognised."
-            )
+        _enrich_from_files(components, solution_root)
 
         # ``detailed_diagram`` is accepted for forward compatibility with richer
         # diagram builders. Current implementation keeps one diagram style.

@@ -878,7 +878,11 @@ def solution_tools_form() -> rx.Component:
                             rx.separator(size="4"),
                             rx.hstack(
                                 _tab_button("Check", "check"),
-                                _tab_button("Validate", "validate"),
+                                rx.cond(
+                                    State.sol_has_agent_assets,
+                                    _tab_button("Validate", "validate"),
+                                    rx.fragment(),
+                                ),
                                 _tab_button("Dependencies", "deps"),
                                 rx.cond(
                                     State.sol_has_agent_assets,
@@ -891,7 +895,7 @@ def solution_tools_form() -> rx.Component:
                             rx.match(
                                 State.sol_active_tab,
                                 ("check", _sol_check_tab()),
-                                ("validate", _sol_validate_tab()),
+                                ("validate", rx.cond(State.sol_has_agent_assets, _sol_validate_tab(), _sol_check_tab())),
                                 ("deps", _sol_deps_tab()),
                                 (
                                     "rename",

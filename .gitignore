@@ -45,3 +45,6 @@ data/*
 
 # Local docs / plans
 docs/
+
+# Local examples
+examples/

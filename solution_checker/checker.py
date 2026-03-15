@@ -11,7 +11,7 @@ import defusedxml.ElementTree as ET
 from loguru import logger
 
 from deps_analyzer import analyze_deps_zip_bytes
-from utils import safe_extractall
+from utils import find_solution_root, safe_extractall, zip_has_agent_assets
 
 from ._helpers import _YAML_AVAILABLE, _info, _load_yaml, _read_xml
 from .agent_config import _check_agent_config
@@ -67,7 +67,7 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
 
     # Accept both agent and non-agent solution ZIPs.
     # Some valid solutions do not include Copilot assets under bots/.
-    has_agent_assets = any(n == "bots" or n.startswith("bots/") for n in names)
+    has_agent_assets = zip_has_agent_assets(names)
     has_solution_manifest = any(Path(n).name.lower() == "solution.xml" for n in names)
     if not (has_agent_assets or has_solution_manifest):
         return _empty_check_result(
@@ -93,20 +93,24 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             safe_extractall(zf, work_dir)
 
+        solution_root = find_solution_root(work_dir)
+        if solution_root is None:
+            return _empty_check_result("No solution.xml found after ZIP extraction.", has_agent_assets=has_agent_assets)
+
         # Detect bot schema
-        bots_dir = work_dir / "bots"
+        bots_dir = solution_root / "bots"
         bot_folders = [d for d in bots_dir.iterdir() if d.is_dir()] if bots_dir.exists() else []
         schema = bot_folders[0].name if bot_folders else ""
 
         # Detect agent / solution names for the summary header
         if schema:
-            gpt_xml = work_dir / "botcomponents" / f"{schema}.gpt.default" / "botcomponent.xml"
+            gpt_xml = solution_root / "botcomponents" / f"{schema}.gpt.default" / "botcomponent.xml"
             if gpt_xml.exists():
                 agent_name = _read_xml(gpt_xml, "name").get("name", schema)
             else:
                 agent_name = schema
 
-            config_path = work_dir / "bots" / schema / "configuration.json"
+            config_path = solution_root / "bots" / schema / "configuration.json"
             if config_path.exists():
                 try:
                     import json
@@ -115,7 +119,7 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
                 except Exception as exc:
                     logger.debug("Failed to parse solution configuration.json: {}", exc)
 
-        sol_xml = work_dir / "solution.xml"
+        sol_xml = solution_root / "solution.xml"
         if sol_xml.exists():
             try:
                 root = ET.parse(sol_xml).getroot()
@@ -126,14 +130,14 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
                 logger.debug("Failed to parse solution.xml while extracting solution name: {}", exc)
 
         # ── Run all check groups ────────────────────────────────────────
-        results.extend(_check_solution_xml(work_dir))
+        results.extend(_check_solution_xml(solution_root))
         if schema:
-            results.extend(_check_agent_config(work_dir, schema))
-            results.extend(_check_topics(work_dir, schema))
-            results.extend(_check_knowledge(work_dir, schema, bot_config))
-            results.extend(_check_security(work_dir, schema))
+            results.extend(_check_agent_config(solution_root, schema))
+            results.extend(_check_topics(solution_root, schema))
+            results.extend(_check_knowledge(solution_root, schema, bot_config))
+            results.extend(_check_security(solution_root, schema))
             # Orchestrator checks (only if agent has TaskDialog/AgentDialog)
-            botcomponents_dir = work_dir / "botcomponents"
+            botcomponents_dir = solution_root / "botcomponents"
             is_orchestrator = False
             if botcomponents_dir.exists():
                 for comp_dir in botcomponents_dir.iterdir():
@@ -148,7 +152,7 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
                         is_orchestrator = True
                         break
             if is_orchestrator:
-                results.extend(_check_orchestrator(work_dir, schema))
+                results.extend(_check_orchestrator(solution_root, schema))
         else:
             results.append(
                 _info(
@@ -168,9 +172,9 @@ def check_solution_zip(zip_bytes: bytes, *, custom_rules: list[dict] | None = No
                 from parser import parse_yaml
 
                 # Find botContent YAML files and parse into a BotProfile
-                bot_content_files = list((work_dir / "bots" / schema).glob("**/botContent.yml"))
+                bot_content_files = list((solution_root / "bots" / schema).glob("**/botContent.yml"))
                 if not bot_content_files:
-                    bot_content_files = list((work_dir / "bots" / schema).glob("**/*.yml"))
+                    bot_content_files = list((solution_root / "bots" / schema).glob("**/*.yml"))
                 if bot_content_files:
                     profile, _ = parse_yaml(bot_content_files[0])
                     parsed_rules = [CustomRule(**r) for r in custom_rules]

@@ -12,7 +12,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from utils import safe_extractall
+from utils import find_solution_root, safe_extractall
 
 try:
     import yaml as _yaml  # type: ignore[import-untyped]
@@ -52,12 +52,19 @@ _HINT_TO_KEY: dict[str, str | None] = {
     "o3-mini": "o3",
     "o4-mini": "o4mini",
     "o4mini": "o4mini",
-    # Below threshold — not assessed
-    "GPT4o": None,
-    "gpt-4o": None,
-    "gpt-4o-mini": None,
-    "gpt-4": None,
-    "GPT4": None,
+    # Legacy but still supported in some Copilot Studio environments
+    "GPT4o": "gpt4o",
+    "gpt-4o": "gpt4o",
+    "gpt4o": "gpt4o",
+    "gpt-4o-mini": "gpt4omini",
+    "gpt4omini": "gpt4omini",
+    "gpt-4": "gpt4",
+    "GPT4": "gpt4",
+    "gpt4": "gpt4",
+}
+
+_NORMALIZED_HINT_TO_KEY: dict[str, str | None] = {
+    re.sub(r"[^a-z0-9]", "", k.lower()): v for k, v in _HINT_TO_KEY.items()
 }
 
 # Per-model validation parameters
@@ -134,6 +141,33 @@ _MODEL_META: dict[str, dict] = {
         "is_reasoning": True,
         "is_compact": True,
     },
+    "gpt4o": {
+        "display": "GPT-4o",
+        "min_length_fail": 40,
+        "min_length_warn": 150,
+        "max_length_warn": 8_000,
+        "check_grounding": True,
+        "is_reasoning": False,
+        "is_compact": False,
+    },
+    "gpt4omini": {
+        "display": "GPT-4o Mini",
+        "min_length_fail": 25,
+        "min_length_warn": 100,
+        "max_length_warn": 3_000,
+        "check_grounding": True,
+        "is_reasoning": False,
+        "is_compact": True,
+    },
+    "gpt4": {
+        "display": "GPT-4",
+        "min_length_fail": 40,
+        "min_length_warn": 150,
+        "max_length_warn": 8_000,
+        "check_grounding": True,
+        "is_reasoning": False,
+        "is_compact": False,
+    },
 }
 
 
@@ -149,12 +183,9 @@ def _resolve_model_key(hint: str | None) -> str | None:
         return None
     if hint in _HINT_TO_KEY:
         return _HINT_TO_KEY[hint]
-    # Case-insensitive fallback
-    lower = hint.lower()
-    for k, v in _HINT_TO_KEY.items():
-        if k.lower() == lower:
-            return v
-    return None
+
+    normalized = re.sub(r"[^a-z0-9]", "", hint.lower())
+    return _NORMALIZED_HINT_TO_KEY.get(normalized)
 
 
 def _load_best_practices(model_key: str) -> str:
@@ -655,20 +686,56 @@ def _extract_gpt_info_from_solution(work_dir: Path) -> tuple[str | None, str]:
     if not gpt_dir.exists():
         return None, ""
 
+    def _get_nested(obj: dict, path: tuple[str, ...]):
+        current = obj
+        for key in path:
+            if not isinstance(current, dict) or key not in current:
+                return None
+            current = current[key]
+        return current
+
+    def _find_hint_in_settings(settings_obj: dict) -> str | None:
+        for val in settings_obj.values():
+            if not isinstance(val, dict):
+                continue
+            content = val.get("content") if isinstance(val.get("content"), dict) else val
+            hint = content.get("modelNameHint") or content.get("modelHint")
+            if isinstance(hint, str) and hint.strip():
+                return hint.strip()
+        return None
+
     # Read model hint from data YAML
     gpt_data = _load_yaml(gpt_dir / "data")
     instructions = gpt_data.get("instructions") or ""
     model_hint = gpt_data.get("modelNameHint") or gpt_data.get("modelHint") or None
 
+    if not instructions:
+        instructions = (
+            _get_nested(gpt_data, ("aISettings", "instructions"))
+            or _get_nested(gpt_data, ("aiSettings", "instructions"))
+            or ""
+        )
+
+    # Common Copilot Studio export shape: aISettings.model.modelNameHint
+    if model_hint is None:
+        model_hint = (
+            _get_nested(gpt_data, ("aISettings", "model", "modelNameHint"))
+            or _get_nested(gpt_data, ("aISettings", "model", "modelHint"))
+            or _get_nested(gpt_data, ("aiSettings", "model", "modelNameHint"))
+            or _get_nested(gpt_data, ("aiSettings", "model", "modelHint"))
+        )
+
     # Also try settings inside the data
     settings = gpt_data.get("settings") or {}
-    if model_hint is None and settings:
-        for _key, sv in settings.items():
-            if isinstance(sv, dict):
-                hint = sv.get("modelNameHint") or sv.get("modelHint")
-                if hint:
-                    model_hint = hint
-                    break
+    if model_hint is None and isinstance(settings, dict) and settings:
+        model_hint = _find_hint_in_settings(settings)
+
+    # Extension data occasionally persists the selected model metadata.
+    if model_hint is None:
+        model_hint = (
+            _get_nested(gpt_data, ("extensionData", "lastUsedCustomModel", "modelNameHint"))
+            or _get_nested(gpt_data, ("extensionData", "lastUsedCustomModel", "modelHint"))
+        )
 
     # Fallback: try configuration.json for model hint
     if model_hint is None:
@@ -679,15 +746,13 @@ def _extract_gpt_info_from_solution(work_dir: Path) -> tuple[str | None, str]:
             try:
                 config = json.loads(config_path.read_text(encoding="utf-8"))
                 settings = config.get("settings") or {}
-                for _key, sv in settings.items():
-                    if isinstance(sv, dict):
-                        content = sv.get("content") or sv
-                        hint = content.get("modelNameHint") or content.get("modelHint")
-                        if hint:
-                            model_hint = hint
-                            break
+                if isinstance(settings, dict):
+                    model_hint = _find_hint_in_settings(settings)
             except Exception:
                 pass
+
+    if isinstance(model_hint, str):
+        model_hint = model_hint.strip() or None
 
     return model_hint, instructions
 
@@ -712,6 +777,10 @@ def validate_zip_bytes(zip_bytes: bytes) -> dict:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             safe_extractall(zf, tmp)
 
-        hint, instructions = _extract_gpt_info_from_solution(tmp)
+        solution_root = find_solution_root(tmp)
+        if solution_root is None:
+            raise ValueError("No solution.xml found — this does not appear to be a Power Platform solution export.")
+
+        hint, instructions = _extract_gpt_info_from_solution(solution_root)
 
     return validate_instructions(instructions, hint)

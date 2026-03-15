@@ -8,6 +8,7 @@ from pathlib import Path
 from deps_analyzer import analyze_deps_zip_bytes, analyze_deps_zip_bytes_report
 from solution_checker import check_solution_zip
 from utils import is_zip_filename, safe_extractall, safe_temp_path
+from validator import validate_instructions, validate_zip_bytes
 
 
 def _zip_bytes(files: dict[str, str]) -> bytes:
@@ -196,3 +197,154 @@ def test_is_zip_filename_accepts_zip_only():
   assert is_zip_filename("solution.ZIP") is True
   assert is_zip_filename("solution.json") is False
   assert is_zip_filename(None) is False
+
+
+def test_solution_checker_detects_agent_assets_in_nested_export_root():
+    zip_bytes = _zip_bytes(
+        {
+            "ExportRoot/solution.xml": """
+<ImportExportXml>
+  <SolutionManifest>
+    <UniqueName>NestedAgentSolution</UniqueName>
+    <Version>1.0.0.0</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>contoso</UniqueName>
+      <CustomizationPrefix>cts</CustomizationPrefix>
+    </Publisher>
+    <Descriptions>
+      <Description description="Nested root test" />
+    </Descriptions>
+  </SolutionManifest>
+</ImportExportXml>
+""".strip(),
+            "ExportRoot/bots/sample_agent/bot.xml": "<bot><name>Sample Agent</name></bot>",
+            "ExportRoot/botcomponents/sample_agent.gpt.default/botcomponent.xml": "<botcomponent><name>Sample Agent</name></botcomponent>",
+            "ExportRoot/botcomponents/sample_agent.gpt.default/data": "instructions: test\n",
+            "ExportRoot/bots/sample_agent/configuration.json": "{}",
+        }
+    )
+
+    result = check_solution_zip(zip_bytes)
+
+    assert result["error"] == ""
+    assert result["has_agent_assets"] is True
+    assert result["solution_name"] == "NestedAgentSolution"
+
+
+def test_solution_checker_accepts_non_agent_nested_export_root():
+    zip_bytes = _zip_bytes(
+        {
+            "NonAgentRoot/solution.xml": """
+<ImportExportXml>
+  <SolutionManifest>
+    <UniqueName>NestedNonAgentSolution</UniqueName>
+    <Version>1.0.0.0</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>contoso</UniqueName>
+      <CustomizationPrefix>cts</CustomizationPrefix>
+    </Publisher>
+    <Descriptions>
+      <Description description="Nested root non-agent test" />
+    </Descriptions>
+  </SolutionManifest>
+</ImportExportXml>
+""".strip(),
+        }
+    )
+
+    result = check_solution_zip(zip_bytes)
+
+    assert result["error"] == ""
+    assert result["has_agent_assets"] is False
+    assert result["solution_name"] == "NestedNonAgentSolution"
+
+
+def test_deps_report_allows_solution_without_root_components():
+    zip_bytes = _zip_bytes(
+        {
+            "NoComponents/solution.xml": """
+<ImportExportXml>
+  <SolutionManifest>
+    <UniqueName>NoComponentsSolution</UniqueName>
+    <Version>1.0.0.0</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>contoso</UniqueName>
+      <CustomizationPrefix>cts</CustomizationPrefix>
+    </Publisher>
+    <Descriptions>
+      <Description description="No root components" />
+    </Descriptions>
+  </SolutionManifest>
+</ImportExportXml>
+""".strip(),
+        }
+    )
+
+    report = analyze_deps_zip_bytes_report(zip_bytes)
+
+    assert ("NoComponentsSolution" in report["summary_markdown"]) or (
+      "No root components" in report["summary_markdown"]
+    )
+    assert isinstance(report["component_rows"], list)
+    assert report["component_rows"] == []
+
+
+def test_validate_zip_resolves_model_hint_from_ai_settings():
+    zip_bytes = _zip_bytes(
+        {
+            "solution.xml": """
+<ImportExportXml>
+  <SolutionManifest>
+    <UniqueName>ValidatorHintSolution</UniqueName>
+    <Version>1.0.0.0</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>contoso</UniqueName>
+      <CustomizationPrefix>cts</CustomizationPrefix>
+    </Publisher>
+    <Descriptions>
+      <Description description="Validator hint test" />
+    </Descriptions>
+  </SolutionManifest>
+</ImportExportXml>
+""".strip(),
+            "bots/sample_agent/configuration.json": "{}",
+            "botcomponents/sample_agent.gpt.default/data": """
+kind: GptComponentMetadata
+displayName: Sample Agent
+instructions: |
+  You are a helpful assistant.
+aISettings:
+  model:
+    modelNameHint: GPT5Chat
+""".strip(),
+        }
+    )
+
+    result = validate_zip_bytes(zip_bytes)
+
+    assert result["model_key"] == "gpt5chat"
+    assert result["model_display"] == "GPT-5 Chat"
+    assert result["best_practices_md"]
+
+
+def test_validate_instructions_legacy_model_profiles_are_assessed():
+    r_4o = validate_instructions("You are a helpful assistant.", "GPT4o")
+    r_4o_mini = validate_instructions("You are a helpful assistant.", "gpt-4o-mini")
+    r_4 = validate_instructions("You are a helpful assistant.", "gpt-4")
+
+    assert r_4o["model_key"] == "gpt4o"
+    assert r_4o["model_display"] == "GPT-4o"
+    assert r_4o["best_practices_md"]
+    assert r_4o["results"]
+
+    assert r_4o_mini["model_key"] == "gpt4omini"
+    assert r_4o_mini["model_display"] == "GPT-4o Mini"
+    assert r_4o_mini["best_practices_md"]
+
+    assert r_4["model_key"] == "gpt4"
+    assert r_4["model_display"] == "GPT-4"
+    assert r_4["best_practices_md"]
